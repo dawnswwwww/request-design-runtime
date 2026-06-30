@@ -270,12 +270,23 @@ const completion = await openai.chat.completions.create({
 
 ## 10. 配置项
 
+项目依赖使用 **Bun** 安装：
+
+```bash
+bun add drizzle-orm
+bun add -d drizzle-kit
+bun add hono openai postgres zod
+```
+
+环境变量：
+
 ```env
 # Server
 PORT=3000
 OUTPUT_DIR=/output
 
 # Supabase / Drizzle
+# 使用 Transaction mode pooler 时，postgres 客户端需要设置 prepare: false
 DATABASE_URL="postgresql://postgres.aalebhetaflxbwmawsft:[YOUR-PASSWORD]@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres"
 
 # LLM (OpenAI compatible)
@@ -294,6 +305,7 @@ JOB_TIMEOUT_MS=300000
 ```
 
 说明：Supabase 使用 transaction-mode pooler 时，需设置 `prepare: false`。
+实际密码存放在项目根目录 `.env` 中（已加入 `.gitignore`），`.env.example` 提供模板。
 
 ## 11. Docker 设计
 
