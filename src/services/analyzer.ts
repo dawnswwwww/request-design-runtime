@@ -1,13 +1,9 @@
-import { eq } from 'drizzle-orm';
-import { db } from '../db';
-import { jobs } from '../../drizzle/schema';
 import {
   completeJob,
   failJob,
   updateJobProgress,
   updateJobStatus,
 } from './jobs';
-import { McpClient } from './mcp';
 import { discoverPages, selectPages } from './crawler';
 import { extractTokens } from './extractor';
 import { synthesize } from './synthesizer';
@@ -16,6 +12,10 @@ import { createLlmClientFromEnv, LlmClient } from './llm';
 import { extractDomain, extractRootUrl } from '../utils/url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import type { BrowserClient } from './browser';
+import { getBrowserEngine } from './browser';
+import { McpClient } from './mcp';
+import { PlaywrightBrowserClient } from './playwright';
 
 const EXTRACTION_SCRIPT = `(function() {
   const elements = Array.from(document.querySelectorAll('body, body *'));
@@ -41,34 +41,45 @@ const EXTRACTION_SCRIPT = `(function() {
       boxShadow: style.boxShadow,
     });
   }
-  return samples.slice(0, 500);
+  return JSON.stringify(samples.slice(0, 500));
 })();`;
+
+export async function createBrowserClient(): Promise<BrowserClient> {
+  const engine = getBrowserEngine();
+  if (engine === 'playwright') {
+    return new PlaywrightBrowserClient();
+  }
+  const mcpPath = process.env.LIGHTPANDA_BIN || 'lightpanda';
+  return new McpClient(`${mcpPath} mcp`);
+}
 
 export async function startAnalysis(
   jobId: string,
   url: string,
   outputPath: string,
-  deps: { mcp?: McpClient; llm?: LlmClient } = {}
+  deps: { browser?: BrowserClient; llm?: LlmClient } = {}
 ): Promise<void> {
   const outputDir = process.env.OUTPUT_DIR || './output';
-  const mcpPath = process.env.LIGHTPANDA_BIN || 'lightpanda';
-  const mcp = deps.mcp ?? new McpClient(`${mcpPath} mcp`);
+  const browser = deps.browser ?? (await createBrowserClient());
 
   try {
     await updateJobStatus(jobId, 'running');
-    await mcp.start();
+    await browser.start();
 
     try {
-      await mcp.goto(url);
+      await browser.goto(url);
       const domain = extractDomain(url);
       const rootUrl = extractRootUrl(url);
 
-      const links = await mcp.links();
-      const discovered = discoverPages(rootUrl, links.map((l: { href: string; text: string }) => ({
-        href: l.href,
-        text: l.text,
-        context: 'in-content',
-      })));
+      const links = await browser.links();
+      const discovered = discoverPages(
+        rootUrl,
+        links.map((l) => ({
+          href: l.href,
+          text: l.text,
+          context: 'in-content' as const,
+        }))
+      );
       const pages = selectPages(rootUrl, discovered, Number(process.env.MAX_PAGES) || 6);
 
       const allRawTokens = [];
@@ -76,10 +87,21 @@ export async function startAnalysis(
       const step = 60 / pages.length;
 
       for (const pageUrl of pages) {
-        await mcp.goto(pageUrl);
-        const result = await mcp.evaluate(EXTRACTION_SCRIPT);
-        if (Array.isArray(result)) {
-          allRawTokens.push(...result);
+        try {
+          await browser.goto(pageUrl);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn(`Skipping page ${pageUrl}: ${message}`);
+          continue;
+        }
+        const result = await browser.evaluate<string>(EXTRACTION_SCRIPT);
+        try {
+          const parsed = JSON.parse(result);
+          if (Array.isArray(parsed)) {
+            allRawTokens.push(...parsed);
+          }
+        } catch {
+          console.warn('Failed to parse extraction result');
         }
         progress += step;
         await updateJobProgress(jobId, Math.min(Math.round(progress), 70));
@@ -103,7 +125,7 @@ export async function startAnalysis(
         downloadUrl: `/jobs/${jobId}/download`,
       });
     } finally {
-      await mcp.close();
+      await browser.close();
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

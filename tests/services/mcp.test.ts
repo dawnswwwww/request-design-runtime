@@ -25,10 +25,11 @@ describe('McpClient', () => {
     expect(result).toContain('loaded https://example.com');
   });
 
-  test('evaluate returns evaluated result', async () => {
+  test('evaluate returns raw text result', async () => {
     await client.start();
     const result = await client.evaluate('document.title');
-    expect(result.result).toContain('evaluated');
+    expect(typeof result).toBe('string');
+    expect(result).toContain('[');
   });
 
   test('links returns array of links', async () => {

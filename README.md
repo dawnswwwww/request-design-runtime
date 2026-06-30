@@ -5,15 +5,25 @@
 ## 技术栈
 
 - **Bun + TypeScript + Hono**
-- **Lightpanda**（MCP stdio 接口）
+- **Playwright + Chromium**（默认，可切换 Lightpanda）
 - **Supabase Postgres + Drizzle ORM**
 - **OpenAI 兼容 LLM API**（默认 DeepSeek）
+
+浏览器引擎可通过 `BROWSER_ENGINE` 切换：
+
+```env
+BROWSER_ENGINE=playwright   # 默认，功能完整
+BROWSER_ENGINE=lightpanda   # 实验性，需本地安装 lightpanda 二进制
+```
+
+> 注：Lightpanda 目前对 `getComputedStyle` 的支持有限，提取设计 token 时可能得到空值，因此生产环境推荐使用 Playwright。
 
 ## 快速开始
 
 ```bash
-# 1. 安装依赖
+# 1. 安装依赖（会自动安装 Playwright Chromium）
 bun install
+bunx playwright install chromium
 
 # 2. 配置环境变量
 cp .env.example .env
@@ -50,8 +60,8 @@ docker compose up --build
 
 严格遵循 TDD：
 
-- 86 个测试用例全部通过
-- 行覆盖率 **97.79%**，函数覆盖率 **98.32%**
+- 92 个测试用例全部通过
+- 行覆盖率 **94.36%**，函数覆盖率 **96.18%**
 
 ```bash
 bun test --coverage

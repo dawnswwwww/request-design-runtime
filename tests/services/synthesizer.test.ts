@@ -59,6 +59,31 @@ describe('synthesizer', () => {
     expect(system.rounded.full).toBe('9999px');
   });
 
+  test('builds typography tokens', () => {
+    const raw = {
+      colors: [],
+      typography: [
+        { fontFamily: 'Inter, sans-serif', fontSize: '32px', fontWeight: '700', lineHeight: '1.2', letterSpacing: '-0.02em' },
+        { fontFamily: 'Inter, sans-serif', fontSize: '16px', fontWeight: '400', lineHeight: '1.5', letterSpacing: '0' },
+        { fontFamily: 'Inter, sans-serif', fontSize: '14px', fontWeight: '400', lineHeight: '1.5', letterSpacing: '0' },
+      ],
+      spacing: [],
+      radius: [],
+      shadows: [],
+    };
+
+    const system = synthesize(raw, { brandName: 'Example' });
+    expect(system.typography.family).toBe('Inter');
+    expect(system.typography['headline-lg']).toMatchObject({ fontSize: '32px', fontWeight: '700' });
+  });
+    const raw = {
+      colors: [],
+      typography: [],
+      spacing: [],
+      radius: [],
+      shadows: [],
+    };
+
   test('sets metadata from brand name', () => {
     const raw = {
       colors: [],

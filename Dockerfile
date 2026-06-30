@@ -1,26 +1,24 @@
-FROM oven/bun:1.2-slim
+FROM mcr.microsoft.com/playwright:v1.61.1-jammy
 
-# Install Lightpanda binary
+# Install Bun
 RUN apt-get update \
-  && apt-get install -y curl ca-certificates \
-  && curl -L -o /usr/local/bin/lightpanda \
-     https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux \
-  && chmod +x /usr/local/bin/lightpanda \
+  && apt-get install -y curl unzip \
+  && curl -fsSL https://bun.sh/install | bash \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-
-COPY package.json bun.lockb ./
-RUN bun install --production
-
-COPY . .
-
+ENV PATH="/root/.bun/bin:${PATH}"
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV OUTPUT_DIR=/app/output
-ENV LIGHTPANDA_BIN=/usr/local/bin/lightpanda
-ENV LIGHTPANDA_TELEMETRY=false
+ENV BROWSER_ENGINE=playwright
+
+WORKDIR /app
+
+COPY package.json bun.lock ./
+RUN bun install --production
+
+COPY . .
 
 VOLUME ["/app/output"]
 EXPOSE 3000

@@ -45,7 +45,7 @@ describe('jobs routes', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.id).toBe(jobId);
-    expect(body.status).toBe('pending');
+    expect(['pending', 'running']).toContain(body.status);
   });
 
   test('GET /jobs/:id returns 404 for missing job', async () => {

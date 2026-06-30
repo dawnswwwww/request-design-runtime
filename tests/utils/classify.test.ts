@@ -25,10 +25,14 @@ describe('classifyPage', () => {
     expect(result.priority).toBe(PagePriority.MEDIUM);
   });
 
-  test('skips legal pages', () => {
-    const result = classifyPage('https://example.com/privacy', 'Privacy Policy');
-    expect(result.type).toBe(PageType.LEGAL);
-    expect(result.priority).toBe(PagePriority.SKIP);
+  test('skips auth and legal pages', () => {
+    const auth = classifyPage('https://example.com/login', 'Sign in');
+    expect(auth.type).toBe(PageType.AUTH);
+    expect(auth.priority).toBe(PagePriority.SKIP);
+
+    const legal = classifyPage('https://example.com/privacy', 'Privacy Policy');
+    expect(legal.type).toBe(PageType.LEGAL);
+    expect(legal.priority).toBe(PagePriority.SKIP);
   });
 
   test('uses first match in table order when multiple match', () => {

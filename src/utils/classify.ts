@@ -30,7 +30,7 @@ const RULES: Classification[] = [
   { type: PageType.DASHBOARD, priority: PagePriority.HIGH },
   { type: PageType.ABOUT, priority: PagePriority.MEDIUM },
   { type: PageType.BLOG, priority: PagePriority.MEDIUM },
-  { type: PageType.AUTH, priority: PagePriority.MEDIUM },
+  { type: PageType.AUTH, priority: PagePriority.SKIP },
   { type: PageType.CONTACT, priority: PagePriority.MEDIUM },
   { type: PageType.LEGAL, priority: PagePriority.SKIP },
 ];

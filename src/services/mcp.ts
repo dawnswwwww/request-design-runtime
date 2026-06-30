@@ -1,4 +1,5 @@
 import { spawn, type Subprocess } from 'bun';
+import type { BrowserClient, BrowserLink } from './browser';
 
 interface McpResponse {
   jsonrpc: '2.0';
@@ -7,7 +8,7 @@ interface McpResponse {
   error?: { code: number; message: string };
 }
 
-export class McpClient {
+export class McpClient implements BrowserClient {
   private process: Subprocess | null = null;
   private requestId = 0;
   private pending = new Map<number | string, { resolve: (value: unknown) => void; reject: (reason: Error) => void }>();
@@ -119,20 +120,15 @@ export class McpClient {
     return result.content?.[0]?.text ?? '';
   }
 
-  async evaluate(script: string): Promise<unknown> {
+  async evaluate<T = string>(_script: string): Promise<T> {
     const result = (await this.call('tools/call', {
       name: 'evaluate',
-      arguments: { script },
+      arguments: { script: _script },
     })) as { content?: { type: string; text: string }[] };
-    const text = result.content?.[0]?.text ?? '{}';
-    try {
-      return JSON.parse(text);
-    } catch {
-      return text;
-    }
+    return (result.content?.[0]?.text ?? '{}') as T;
   }
 
-  async links(): Promise<Array<{ href: string; text: string }>> {
+  async links(): Promise<BrowserLink[]> {
     const result = (await this.call('tools/call', {
       name: 'links',
       arguments: {},

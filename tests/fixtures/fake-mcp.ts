@@ -34,7 +34,43 @@ process.stdin.on('data', (chunk) => {
           sendResponse(id, { content: [{ type: 'text', text: `loaded ${args.url}` }] });
         } else if (name === 'evaluate') {
           sendResponse(id, {
-            content: [{ type: 'text', text: JSON.stringify({ result: `evaluated ${args.script?.slice(0, 20)}` }) }],
+            content: [{
+              type: 'text',
+              text: JSON.stringify([
+                {
+                  tag: 'BUTTON',
+                  color: 'rgb(255, 255, 255)',
+                  backgroundColor: 'rgb(59, 130, 246)',
+                  borderColor: 'rgb(59, 130, 246)',
+                  borderRadius: '8px',
+                  fontFamily: 'Inter',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  lineHeight: '1.5',
+                  letterSpacing: '0px',
+                  padding: '12px 24px',
+                  margin: '0px',
+                  gap: '0px',
+                  boxShadow: 'none',
+                },
+                {
+                  tag: 'DIV',
+                  color: 'rgb(17, 24, 39)',
+                  backgroundColor: 'rgb(255, 255, 255)',
+                  borderColor: 'rgba(0, 0, 0, 0)',
+                  borderRadius: '0px',
+                  fontFamily: 'Inter',
+                  fontSize: '16px',
+                  fontWeight: '400',
+                  lineHeight: '1.5',
+                  letterSpacing: '0px',
+                  padding: '16px',
+                  margin: '0px',
+                  gap: '8px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                },
+              ]),
+            }],
           });
         } else if (name === 'links') {
           sendResponse(id, {

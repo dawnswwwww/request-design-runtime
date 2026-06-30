@@ -41,9 +41,12 @@ describe('analyze end-to-end', () => {
       { model: 'test' }
     );
 
-    await startAnalysis(job.id, url, 'e2e-example/DESIGN.md', { mcp, llm: mockLlm });
+    await startAnalysis(job.id, url, 'e2e-example/DESIGN.md', { browser: mcp, llm: mockLlm });
 
     const completed = await getJob(job.id);
+    if (completed?.status === 'failed') {
+      console.error('Job failed:', completed.error);
+    }
     expect(completed?.status).toBe('completed');
     expect(completed?.result).toMatchObject({
       pagesCrawled: expect.any(Number),
