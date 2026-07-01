@@ -25,7 +25,8 @@ import {
 import type { EnrichedSample } from './role-aggregator';
 import { matchRole } from './css-name-match';
 import type { StyleSnapshot } from './role-aggregator';
-import { CSS_VAR_RESOLVE_SCRIPT } from './css-vars-browser';
+import { CSS_VAR_RESOLVE_SCRIPT, RENDER_CHECK_SCRIPT } from './css-vars-browser';
+import { mapCssVarToRole } from './css-vars-role-map';
 
 function extractComputedAnchors(
   style: StyleSnapshot | undefined,
@@ -33,6 +34,48 @@ function extractComputedAnchors(
 ): ComputedAnchor[] {
   if (!style || !style.backgroundColor) return [];
   return [{ role, value: style.backgroundColor }];
+}
+
+interface RenderCheckSample {
+  selector: string;
+  computedBg: string;
+  cssVarResolvesTo: string;
+  cssVarNames: string[];
+}
+
+async function runRenderCheck(
+  browser: BrowserClient,
+  pageUrl: string
+): Promise<RenderCheckSample[]> {
+  try {
+    await browser.goto(pageUrl);
+    const raw = await browser.evaluate<string>(RENDER_CHECK_SCRIPT);
+    return JSON.parse(raw) as RenderCheckSample[];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`render check failed for ${pageUrl}: ${message}`);
+    return [];
+  }
+}
+
+function renderConsistencyForName(
+  samples: RenderCheckSample[],
+  name: string
+): number {
+  // If the css-var appears as the resolved final value of any button bg,
+  // return 1.0; if it appears as a name without matching value, return 0.0;
+  // if absent, return 0.8 (default).
+  let matched = 0;
+  let total = 0;
+  for (const s of samples) {
+    if (!s.cssVarResolvesTo) continue;
+    total += 1;
+    if (s.cssVarResolvesTo.toLowerCase().includes(name.replace('--', '').toLowerCase())) {
+      matched += 1;
+    }
+  }
+  if (total === 0) return 0.8;
+  return total === 0 ? 0.8 : matched / total;
 }
 
 function matchRoleForVar(name: string): Role | null {
@@ -132,7 +175,7 @@ export async function startAnalysis(
         await updateJobProgress(jobId, Math.min(Math.round(progress), 70));
       }
 
-      const globalProfile = buildGlobalProfile(
+      let globalProfile = buildGlobalProfile(
         pageSamples.map((p) => ({ url: p.url, samples: p.samples }))
       );
 
@@ -144,21 +187,55 @@ export async function startAnalysis(
         for (const map of cssCandidatesByPage) map.set(k, v);
       }
 
-      const cssCandidates = Array.from(allCssVars.entries()).flatMap(([name, value]) => {
-        const role = matchRoleForVar(name);
-        if (!role) return [];
-        // Skip transparent / non-color values.
-        if (value === 'transparent' || value === 'inherit' || value === 'initial') return [];
-        if (value.startsWith('var(') || value.includes('var(')) return []; // unresolved chain
-        if (!value.includes('#') && !value.startsWith('rgb')) return []; // not a color value
-        return [{
-          name,
-          value,
-          assignedRole: role,
-          pages: pages.length,
-          renderConsistency: 0.8,
-        }];
-      });
+      // Run a render-consistency check on the root page to get actual vs declared
+      // CSS-var usage on buttons/CTA elements.
+      const renderSamples = await runRenderCheck(browser, pages[0] || url);
+
+      const cssCandidates: Array<{ name: string; value: string; assignedRole: Role; pages: number; renderConsistency: number }> = [];
+      for (const [name, value] of allCssVars.entries()) {
+        if (value === 'transparent' || value === 'inherit' || value === 'initial') continue;
+        if (value.startsWith('var(') || value.includes('var(')) continue;
+        if (!value.includes('#') && !value.startsWith('rgb') && !value.startsWith('hsl')) continue;
+
+        const renderConsistency = renderConsistencyForName(renderSamples, name);
+
+        const semanticRole = mapCssVarToRole(name);
+        if (semanticRole) {
+          cssCandidates.push({
+            name,
+            value,
+            assignedRole: semanticRole as Role,
+            pages: pages.length,
+            renderConsistency,
+          });
+          continue;
+        }
+
+        // Fall back to plain pattern matching.
+        const plain = matchRoleForVar(name);
+        if (plain) {
+          cssCandidates.push({
+            name,
+            value,
+            assignedRole: plain,
+            pages: pages.length,
+            renderConsistency,
+          });
+        }
+      }
+
+      // Build a map of role -> resolved CSS-var value (for synthesizer + downstream).
+      const cssColorTokens: Record<string, string> = {};
+      for (const cand of cssCandidates) {
+        if (!cssColorTokens[cand.assignedRole]) cssColorTokens[cand.assignedRole] = cand.value;
+      }
+      globalProfile = {
+        ...globalProfile,
+        cssVarTokens: {
+          colors: cssColorTokens,
+          source: 'css-vars',
+        },
+      };
 
       const computedAnchors = extractComputedAnchors(
         globalProfile.byRole['button-primary']?.style,

@@ -59,40 +59,91 @@ export function synthesizeFromRoleProfile(
   const typography: Record<string, unknown> = {};
   const roleProvenance: Record<string, Role> = {};
 
-  // Primary color from button-primary, fallback to most-frequent.
-  const buttonPrimary = profile.byRole['button-primary'];
-  if (buttonPrimary?.style.backgroundColor && buttonPrimary.style.backgroundColor !== 'transparent' && buttonPrimary.style.backgroundColor !== 'rgba(0, 0, 0, 0)') {
-    colors.primary = buttonPrimary.style.backgroundColor;
-    roleProvenance['colors.primary'] = 'button-primary';
-    if (buttonPrimary.style.color && buttonPrimary.style.color !== 'transparent') {
-      colors['on-primary'] = buttonPrimary.style.color;
-      roleProvenance['colors.on-primary'] = 'button-primary';
+  const cssColors = (profile.cssVarTokens?.colors as Record<string, string> | undefined) || {};
+
+  // Primary color: prefer CSS-var, fallback to button-primary, then color frequency.
+  if (cssColors.primary) {
+    colors.primary = cssColors.primary;
+    roleProvenance['colors.primary'] = 'css-var';
+  }
+  if (cssColors['on-primary']) {
+    colors['on-primary'] = cssColors['on-primary'];
+    roleProvenance['colors.on-primary'] = 'css-var';
+  }
+
+  if (!colors.primary) {
+    const buttonPrimary = profile.byRole['button-primary'];
+    if (buttonPrimary?.style.backgroundColor && buttonPrimary.style.backgroundColor !== 'transparent' && buttonPrimary.style.backgroundColor !== 'rgba(0, 0, 0, 0)') {
+      colors.primary = buttonPrimary.style.backgroundColor;
+      roleProvenance['colors.primary'] = 'button-primary';
+      if (buttonPrimary.style.color && buttonPrimary.style.color !== 'transparent') {
+        colors['on-primary'] = buttonPrimary.style.color;
+        roleProvenance['colors.on-primary'] = 'button-primary';
+      }
+    } else {
+      const fallback = profile.colorFrequency.find(
+        (c) => c.value !== 'rgba(0, 0, 0, 0)' && c.value !== 'transparent' && !isLight(c.value)
+      )?.value;
+      if (fallback) colors.primary = fallback;
     }
-  } else {
-    const fallback = profile.colorFrequency.find(
-      (c) => c.value !== 'rgba(0, 0, 0, 0)' && c.value !== 'transparent' && !isLight(c.value)
-    )?.value;
-    if (fallback) colors.primary = fallback;
   }
 
-  // Surface / on-surface from a body-class role.
-  const bodyRole = profile.byRole['body'];
-  if (bodyRole?.style.backgroundColor && bodyRole.style.backgroundColor !== 'rgba(0, 0, 0, 0)') {
-    colors.surface = bodyRole.style.backgroundColor;
-    roleProvenance['colors.surface'] = 'body';
+  // Surface / on-surface: prefer CSS-var, fallback to body role.
+  if (cssColors.surface) {
+    colors.surface = cssColors.surface;
+    roleProvenance['colors.surface'] = 'css-var';
   } else {
-    colors.surface = '#FFFFFF';
+    const bodyRole = profile.byRole['body'];
+    if (bodyRole?.style.backgroundColor && bodyRole.style.backgroundColor !== 'rgba(0, 0, 0, 0)') {
+      colors.surface = bodyRole.style.backgroundColor;
+      roleProvenance['colors.surface'] = 'body';
+    } else {
+      colors.surface = '#FFFFFF';
+    }
   }
-  if (bodyRole?.style.color && bodyRole.style.color !== 'transparent') {
-    colors['on-surface'] = bodyRole.style.color;
-    roleProvenance['colors.on-surface'] = 'body';
+  if (cssColors['on-surface']) {
+    colors['on-surface'] = cssColors['on-surface'];
+    roleProvenance['colors.on-surface'] = 'css-var';
+  } else {
+    const bodyRole = profile.byRole['body'];
+    if (bodyRole?.style.color && bodyRole.style.color !== 'transparent') {
+      colors['on-surface'] = bodyRole.style.color;
+      roleProvenance['colors.on-surface'] = 'body';
+    }
   }
 
-  // Secondary from button-secondary.
-  const buttonSecondary = profile.byRole['button-secondary'];
-  if (buttonSecondary?.style.backgroundColor && buttonSecondary.style.backgroundColor !== 'transparent') {
-    colors.secondary = buttonSecondary.style.backgroundColor;
-    roleProvenance['colors.secondary'] = 'button-secondary';
+  // Secondary: CSS-var first, then button-secondary.
+  if (cssColors.secondary) {
+    colors.secondary = cssColors.secondary;
+    roleProvenance['colors.secondary'] = 'css-var';
+  } else {
+    const buttonSecondary = profile.byRole['button-secondary'];
+    if (buttonSecondary?.style.backgroundColor && buttonSecondary.style.backgroundColor !== 'transparent') {
+      colors.secondary = buttonSecondary.style.backgroundColor;
+      roleProvenance['colors.secondary'] = 'button-secondary';
+    }
+  }
+
+  // Semantic colors from CSS-var.
+  if (cssColors.error) {
+    colors.error = cssColors.error;
+    roleProvenance['colors.error'] = 'css-var';
+  }
+  if (cssColors.success) {
+    colors.success = cssColors.success;
+    roleProvenance['colors.success'] = 'css-var';
+  }
+  if (cssColors.warning) {
+    colors.warning = cssColors.warning;
+    roleProvenance['colors.warning'] = 'css-var';
+  }
+  if (cssColors.info) {
+    colors.info = cssColors.info;
+    roleProvenance['colors.info'] = 'css-var';
+  }
+  if (cssColors.neutral) {
+    colors.neutral = cssColors.neutral;
+    roleProvenance['colors.neutral'] = 'css-var';
   }
 
   // Neutrals / accent: pull from frequency, excluding values already used.
@@ -112,17 +163,22 @@ export function synthesizeFromRoleProfile(
 
   // Heading typography.
   const heading = profile.byRole['heading'];
+  const cssFamily = cssColors['font-family'] || profile.cssVarTokens?.typography?.family;
+  if (cssFamily) {
+    const family = cssFamily.split(',')[0].replace(/['"]/g, '').trim();
+    typography.family = family;
+  }
   if (heading?.style.fontFamily) {
     const family = heading.style.fontFamily.split(',')[0].replace(/['"]/g, '').trim();
-    typography.family = family;
+    if (!typography.family) typography.family = family;
     typography['headline-lg'] = {
-      fontFamily: family,
+      fontFamily: typography.family || family,
       fontSize: heading.style.fontSize,
       fontWeight: heading.style.fontWeight,
       lineHeight: heading.style.lineHeight,
       letterSpacing: heading.style.letterSpacing,
     };
-  } else if (profile.fontFrequency[0]) {
+  } else if (!typography.family && profile.fontFrequency[0]) {
     const family = profile.fontFrequency[0].value.split(',')[0].replace(/['"]/g, '').trim();
     typography.family = family;
   }

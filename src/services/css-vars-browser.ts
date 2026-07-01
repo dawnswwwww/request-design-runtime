@@ -14,7 +14,6 @@ export const CSS_VAR_RESOLVE_SCRIPT = `(function() {
       if (!rules) continue;
       const walk = (rule) => {
         if (!rule) return;
-        // CSSStyleRule
         if (rule.style) {
           for (const prop of Array.from(rule.style)) {
             if (prop.startsWith('--')) {
@@ -22,11 +21,9 @@ export const CSS_VAR_RESOLVE_SCRIPT = `(function() {
             }
           }
         }
-        // CSSMediaRule etc.
         if (rule.cssRules) {
           for (const r of Array.from(rule.cssRules)) walk(r);
         }
-        // CSSKeyframesRule doesn't have a style map; skip.
       };
       for (const r of Array.from(rules)) walk(r);
     }
@@ -38,7 +35,6 @@ export const CSS_VAR_RESOLVE_SCRIPT = `(function() {
     if (typeof value !== 'string') return value;
     const trimmed = value.trim();
     if (trimmed.indexOf('var(') !== 0) return value;
-    // Match: var(--name) or var(--name, fallback)
     const open = trimmed.indexOf('(');
     const close = trimmed.lastIndexOf(')');
     if (open < 0 || close < 0 || close < open) return value;
@@ -46,7 +42,6 @@ export const CSS_VAR_RESOLVE_SCRIPT = `(function() {
     const comma = inner.indexOf(',');
     const name = (comma >= 0 ? inner.slice(0, comma) : inner).trim();
     if (!name.startsWith('--')) {
-      // It's a fallback like var(red, blue)
       return comma >= 0 ? inner.slice(comma + 1).trim() : value;
     }
     if (seen.has(name)) return value;
@@ -142,4 +137,37 @@ export const CSS_VAR_LIGHT_SCRIPT = `(function() {
   const resolved = {};
   for (const [k, v] of out.entries()) resolved[k] = resolveCssVar(v, new Set(), 0);
   return JSON.stringify(resolved);
+})();`;
+
+/**
+ * Returns {selector, computedBg, cssVarResolvesTo, cssVarNames}[] for the first 5
+ * buttons/CTA anchors on the page. cssVarResolvesTo is the final computed background
+ * of any inline `--xxx` declared on the element.
+ */
+export const RENDER_CHECK_SCRIPT = `(function() {
+  const out = [];
+  const sels = ['button', 'a.btn', '.btn', '[class*="button"]', '[class*="cta"]', '[class*="primary"]'];
+  for (const el of Array.from(document.querySelectorAll(sels.join(',')))) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) continue;
+    const cs = window.getComputedStyle(el);
+    const cssVarNames = [];
+    let cssVarResolvesTo = '';
+    if (el.style) {
+      for (const prop of Array.from(el.style)) {
+        if (prop.startsWith('--')) {
+          cssVarNames.push(prop);
+          cssVarResolvesTo = cs.getPropertyValue(prop).trim();
+        }
+      }
+    }
+    out.push({
+      selector: (el.tagName || '').toLowerCase() + '.' + ((el.className || '').toString().split(' ')[0] || ''),
+      computedBg: cs.backgroundColor,
+      cssVarResolvesTo: cssVarResolvesTo,
+      cssVarNames: cssVarNames,
+    });
+    if (out.length >= 5) break;
+  }
+  return JSON.stringify(out);
 })();`;

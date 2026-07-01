@@ -40,6 +40,13 @@ export interface GlobalProfile {
   fontFrequency: FrequencyEntry<string>[];
   radiusFrequency: FrequencyEntry<string>[];
   shadowFrequency: FrequencyEntry<string>[];
+  cssVarTokens?: {
+    colors: Record<string, string>;
+    typography?: { family?: string };
+    spacing?: Record<string, string>;
+    radius?: Record<string, string>;
+    source?: string;
+  };
 }
 
 interface PageInput {

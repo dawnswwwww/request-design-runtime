@@ -1,6 +1,11 @@
 import { scoreVariable, type VariableConfidence } from './css-confidence';
 import { isShadeVariant, type Role } from './css-name-match';
 import type { DesignSystem } from './role-synthesizer';
+import { mapCssVarToRole } from './css-vars-role-map';
+
+function broaderRoleConfidence(name: string): string | null {
+  return mapCssVarToRole(name) as unknown as string | null;
+}
 
 export interface RoleDecisionResult {
   decisions: TokenDecision[];
@@ -69,6 +74,11 @@ export function buildCssTokenDecisions(
   for (const cand of cssCandidates) {
     const shade = isShadeVariant(cand.name);
     const confidence = scoreVariable(cand.name, cand.value, cand.assignedRole);
+    // Boost confidence if the broader role mapper confirms this is a real semantic token.
+    if (broaderRoleConfidence(cand.name) === cand.assignedRole) {
+      confidence.score = Math.min(1, confidence.score + 0.5);
+      confidence.factors.nameMatch = Math.min(1, confidence.factors.nameMatch + 0.3);
+    }
     confidence.factors.consistent = Math.min(1, cand.pages / 3);
     const renderScore = cand.renderConsistency;
 
