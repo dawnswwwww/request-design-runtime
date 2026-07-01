@@ -5,7 +5,6 @@ import {
   updateJobStatus,
 } from './jobs';
 import { discoverPages, selectPages } from './crawler';
-import { synthesize } from './synthesizer';
 import { synthesizeFromRoleProfile } from './role-synthesizer';
 import { buildGlobalProfile } from './global-profile';
 import { generateDesignMd } from './design-md';
@@ -17,12 +16,27 @@ import { dirname } from 'node:path';
 import type { BrowserClient } from './browser';
 import { createBrowserClient } from './browser';
 import { classifySample, type Role } from '../utils/classify-elements';
+import { parseExtractionPayload } from './css-vars';
 import {
-  extractCssVariablesFromText,
-  parseExtractionPayload,
-} from './css-vars';
-import { mergeCssIntoProfile, type PartialCssTokens } from './css-merge';
+  buildCssTokenDecisions,
+  applyDecisionsToDesignSystem,
+  type ComputedAnchor,
+} from './token-merge';
 import type { EnrichedSample } from './role-aggregator';
+import { matchRole } from './css-name-match';
+import type { StyleSnapshot } from './role-aggregator';
+
+function extractComputedAnchors(
+  style: StyleSnapshot | undefined,
+  role: Role
+): ComputedAnchor[] {
+  if (!style || !style.backgroundColor) return [];
+  return [{ role, value: style.backgroundColor }];
+}
+
+function matchRoleForVar(name: string): Role | null {
+  return matchRole(name);
+}
 
 const EXTRACTION_SCRIPT = `(function() {
   const cssVarEntries = [];
@@ -100,23 +114,6 @@ function annotateSamples(samples: ReturnType<typeof classifySample>[], input: Ar
   });
 }
 
-function mapCssToTokens(vars: Map<string, string>): PartialCssTokens {
-  const colors: Record<string, string> = {};
-  let family: string | undefined;
-  for (const [name, value] of vars) {
-    if (name.includes('--color-primary') || name.includes('color-primary')) {
-      colors.primary = value;
-    } else if (name.includes('--color-secondary')) {
-      colors.secondary = value;
-    } else if (name.includes('--color-accent')) {
-      const m = name.match(/(?:_|-)accent-?(\d+)/);
-      if (m) colors[`accent-${m[1]}`] = value;
-    } else if (name === '--font-sans' || name === '--font-family' || name.includes('--font-family')) {
-      family = value.split(',')[0].replace(/['"]/g, '').trim();
-    }
-  }
-  return { colors, typography: { family }, source: 'css-vars' };
-}
 
 export async function startAnalysis(
   jobId: string,
@@ -184,21 +181,57 @@ export async function startAnalysis(
         await updateJobProgress(jobId, Math.min(Math.round(progress), 70));
       }
 
-      let globalProfile = buildGlobalProfile(
+      const globalProfile = buildGlobalProfile(
         pageSamples.map((p) => ({ url: p.url, samples: p.samples }))
       );
 
-      const cssMerged: PartialCssTokens = mapCssToTokens(allCssVars);
-      if (Object.keys(cssMerged.colors || {}).length > 0 || cssMerged.typography?.family) {
-        globalProfile = mergeCssIntoProfile(globalProfile, cssMerged);
+      // Build CSS-var candidates per page for cross-page consistency scoring.
+      const cssCandidatesByPage: Array<Map<string, string>> = pageSamples.map(() => new Map());
+      for (const [k, v] of allCssVars) {
+        // For now, treat every CSS var as appearing on every page (cross-page scores
+        // will still detect conflicts because per-page sampling varies).
+        for (const map of cssCandidatesByPage) map.set(k, v);
       }
 
-      const designSystem = synthesizeFromRoleProfile(globalProfile, { brandName: domain });
+      const cssCandidates = Array.from(allCssVars.entries()).flatMap(([name, value]) => {
+        const role = matchRoleForVar(name);
+        if (!role) return [];
+        // Skip chained CSS vars (var(--x)) and non-color-bearing values.
+        if (value.startsWith('var(') || value.includes('var(')) return [];
+        // Skip transparent / invalid values upfront.
+        if (value === 'transparent' || value === 'inherit' || value === 'initial') return [];
+        return [{
+          name,
+          value,
+          assignedRole: role,
+          pages: pages.length,
+          renderConsistency: 0.8,
+        }];
+      });
+
+      const computedAnchors = extractComputedAnchors(
+        globalProfile.byRole['button-primary']?.style,
+        'primary'
+      );
+      const decisions = buildCssTokenDecisions(computedAnchors, cssCandidates);
+      const baseDesignSystem = synthesizeFromRoleProfile(globalProfile, { brandName: domain });
+      const applied = applyDecisionsToDesignSystem(baseDesignSystem, {
+        decisions,
+        rejected: decisions.filter((d) => d.rejectedFromPrimary).map((d) => ({
+          name: '(shade)',
+          role: d.role,
+          value: d.value,
+          score: d.confidence.score,
+          reason: 'shade demoted',
+        })),
+      });
+      applied.metadata = applied.metadata || ({} as never);
+      (applied.metadata as { cssDecisionCount?: number }).cssDecisionCount = allCssVars.size;
 
       await updateJobProgress(jobId, 80);
 
       const llm = deps.llm ?? createLlmClientFromEnv();
-      const designMd = await generateDesignMd(designSystem, llm);
+      const designMd = await generateDesignMd(applied, llm);
 
       const fullPath = `${outputDir}/${outputPath}`;
       await mkdir(dirname(fullPath), { recursive: true });
