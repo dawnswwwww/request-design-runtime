@@ -13,9 +13,7 @@ import { extractDomain, extractRootUrl } from '../utils/url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { BrowserClient } from './browser';
-import { getBrowserEngine } from './browser';
-import { McpClient } from './mcp';
-import { PlaywrightBrowserClient } from './playwright';
+import { createBrowserClient } from './browser';
 
 const EXTRACTION_SCRIPT = `(function() {
   const elements = Array.from(document.querySelectorAll('body, body *'));
@@ -43,15 +41,6 @@ const EXTRACTION_SCRIPT = `(function() {
   }
   return JSON.stringify(samples.slice(0, 500));
 })();`;
-
-export async function createBrowserClient(): Promise<BrowserClient> {
-  const engine = getBrowserEngine();
-  if (engine === 'playwright') {
-    return new PlaywrightBrowserClient();
-  }
-  const mcpPath = process.env.LIGHTPANDA_BIN || 'lightpanda';
-  return new McpClient(`${mcpPath} mcp`);
-}
 
 export async function startAnalysis(
   jobId: string,

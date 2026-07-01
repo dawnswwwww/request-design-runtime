@@ -1,9 +1,21 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { app } from '../../src/app';
+import { Hono } from 'hono';
+import { healthRoutes } from '../../src/routes/health';
+import { createJobsRoutes } from '../../src/routes/jobs';
 import { resetDatabase } from '../../src/db';
 
+function createTestApp() {
+  const app = new Hono();
+  app.route('/', healthRoutes);
+  app.route('/', createJobsRoutes(async () => {}));
+  return app;
+}
+
 describe('jobs routes', () => {
+  let app: ReturnType<typeof createTestApp>;
+
   beforeEach(async () => {
+    app = createTestApp();
     await resetDatabase();
   });
 
@@ -45,7 +57,7 @@ describe('jobs routes', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.id).toBe(jobId);
-    expect(['pending', 'running']).toContain(body.status);
+    expect(body.status).toBe('pending');
   });
 
   test('GET /jobs/:id returns 404 for missing job', async () => {
