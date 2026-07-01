@@ -25,6 +25,7 @@ import {
 import type { EnrichedSample } from './role-aggregator';
 import { matchRole } from './css-name-match';
 import type { StyleSnapshot } from './role-aggregator';
+import { CSS_VAR_RESOLVE_SCRIPT } from './css-vars-browser';
 
 function extractComputedAnchors(
   style: StyleSnapshot | undefined,
@@ -38,57 +39,7 @@ function matchRoleForVar(name: string): Role | null {
   return matchRole(name);
 }
 
-const EXTRACTION_SCRIPT = `(function() {
-  const cssVarEntries = [];
-  try {
-    for (const sheet of document.styleSheets) {
-      let rules;
-      try { rules = sheet.cssRules; } catch (e) { continue; }
-      if (!rules) continue;
-      for (const rule of rules) {
-        if (!rule.style) continue;
-        for (const prop of Array.from(rule.style)) {
-          if (prop.startsWith('--')) {
-            cssVarEntries.push([prop, rule.style.getPropertyValue(prop).trim()]);
-          }
-        }
-      }
-    }
-  } catch (e) {}
-
-  const elements = Array.from(document.querySelectorAll('body, body *'));
-  const samples = [];
-  for (const el of elements) {
-    const rect = el.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) continue;
-    const style = window.getComputedStyle(el);
-    samples.push({
-      tag: el.tagName,
-      className: el.getAttribute('class') || '',
-      role: el.getAttribute('role'),
-      inNav: !!el.closest('nav, [role="navigation"]'),
-      inHeader: !!el.closest('header'),
-      inMain: !!el.closest('main'),
-      textSample: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 30),
-      style: {
-        color: style.color,
-        backgroundColor: style.backgroundColor,
-        borderColor: style.borderColor,
-        borderRadius: style.borderRadius,
-        fontFamily: style.fontFamily,
-        fontSize: style.fontSize,
-        fontWeight: style.fontWeight,
-        lineHeight: style.lineHeight,
-        letterSpacing: style.letterSpacing,
-        padding: style.padding,
-        boxShadow: style.boxShadow,
-      },
-    });
-  }
-  const cssVarMap = {};
-  for (const [k, v] of cssVarEntries) cssVarMap[k] = v;
-  return JSON.stringify({ samples: samples.slice(0, 500), cssVars: cssVarMap });
-})();`;
+const EXTRACTION_SCRIPT = CSS_VAR_RESOLVE_SCRIPT;
 
 function annotateSamples(samples: ReturnType<typeof classifySample>[], input: Array<{
   tag: string;
@@ -196,10 +147,10 @@ export async function startAnalysis(
       const cssCandidates = Array.from(allCssVars.entries()).flatMap(([name, value]) => {
         const role = matchRoleForVar(name);
         if (!role) return [];
-        // Skip chained CSS vars (var(--x)) and non-color-bearing values.
-        if (value.startsWith('var(') || value.includes('var(')) return [];
-        // Skip transparent / invalid values upfront.
+        // Skip transparent / non-color values.
         if (value === 'transparent' || value === 'inherit' || value === 'initial') return [];
+        if (value.startsWith('var(') || value.includes('var(')) return []; // unresolved chain
+        if (!value.includes('#') && !value.startsWith('rgb')) return []; // not a color value
         return [{
           name,
           value,
