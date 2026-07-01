@@ -42,6 +42,9 @@ Use this extracted design system data:
 
 ${JSON.stringify(system, null, 2)}
 
+When the same role appears on every page (consistency = 100%), treat its tokens as the canonical values.
+If a token has conflicting values across pages, mention the inconsistency in the prose ("on the marketing pages the button shifts to {colors.primary-conflict}") but keep the YAML token as the most common value.
+
 Required sections in order (use ## headings):
 ## Overview - brand personality, target audience, feel
 ## Colors - palette roles and usage
