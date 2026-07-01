@@ -13,5 +13,22 @@ export const jobs = pgTable('jobs', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });
 
+export const designDocs = pgTable('design_docs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  jobId: uuid('job_id')
+    .notNull()
+    .references(() => jobs.id, { onDelete: 'cascade' }),
+  domain: text('domain').notNull(),
+  url: text('url').notNull(),
+  outputPath: text('output_path').notNull(),
+  content: text('content').notNull(),
+  livePreviewPath: text('live_preview_path'),
+  pagesCrawled: integer('pages_crawled').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+});
+
 export type Job = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;
+export type DesignDoc = typeof designDocs.$inferSelect;
+export type NewDesignDoc = typeof designDocs.$inferInsert;

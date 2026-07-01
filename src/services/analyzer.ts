@@ -9,6 +9,7 @@ import { extractTokens } from './extractor';
 import { synthesize } from './synthesizer';
 import { generateDesignMd } from './design-md';
 import { createLlmClientFromEnv, LlmClient } from './llm';
+import { createDesignDoc } from './design-docs';
 import { extractDomain, extractRootUrl } from '../utils/url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -107,6 +108,15 @@ export async function startAnalysis(
       const fullPath = `${outputDir}/${outputPath}`;
       await mkdir(dirname(fullPath), { recursive: true });
       await writeFile(fullPath, designMd, 'utf-8');
+
+      await createDesignDoc({
+        jobId,
+        domain,
+        url,
+        outputPath,
+        content: designMd,
+        pagesCrawled: pages.length,
+      });
 
       await completeJob(jobId, {
         pagesCrawled: pages.length,

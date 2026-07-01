@@ -82,9 +82,9 @@ describe('jobs routes', () => {
     expect(res.status).toBe(404);
   });
 
-  test('GET /jobs/:id/download returns file content when completed', async () => {
+  test('GET /jobs/:id/download returns content from database when completed', async () => {
     const { completeJob } = await import('../../src/services/jobs');
-    const { mkdir, writeFile } = await import('node:fs/promises');
+    const { createDesignDoc } = await import('../../src/services/design-docs');
 
     const create = await app.request('/analyze', {
       method: 'POST',
@@ -92,9 +92,14 @@ describe('jobs routes', () => {
       body: JSON.stringify({ url: 'https://example.com' }),
     });
     const { jobId } = await create.json();
-    process.env.OUTPUT_DIR = `${import.meta.dir}/../../output`;
-    await mkdir(`${process.env.OUTPUT_DIR}/example.com`, { recursive: true });
-    await writeFile(`${process.env.OUTPUT_DIR}/example.com/DESIGN.md`, '# Design', 'utf-8');
+    await createDesignDoc({
+      jobId,
+      domain: 'example.com',
+      url: 'https://example.com',
+      outputPath: 'example.com/DESIGN.md',
+      content: '# Design\n\nFrom database',
+      pagesCrawled: 1,
+    });
     await completeJob(jobId, { outputPath: 'example.com/DESIGN.md' });
 
     const res = await app.request(`/jobs/${jobId}/download`);

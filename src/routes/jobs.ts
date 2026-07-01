@@ -2,8 +2,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { getJob, createJob } from '../services/jobs';
 import { startAnalysis } from '../services/analyzer';
+import { getDesignDocByJobId } from '../services/design-docs';
 import { extractDomain } from '../utils/url';
-import { readFile } from 'node:fs/promises';
 
 export function createJobsRoutes(
   analyze: typeof startAnalysis = startAnalysis
@@ -50,14 +50,12 @@ export function createJobsRoutes(
       return c.json({ error: 'Design file not ready' }, 400);
     }
 
-    const outputDir = process.env.OUTPUT_DIR || './output';
-    const fullPath = `${outputDir}/${job.outputPath}`;
-    try {
-      const content = await readFile(fullPath, 'utf-8');
-      return c.text(content, 200, { 'Content-Type': 'text/markdown' });
-    } catch {
-      return c.json({ error: 'Design file not found' }, 404);
+    const doc = await getDesignDocByJobId(id);
+    if (doc?.content) {
+      return c.text(doc.content, 200, { 'Content-Type': 'text/markdown' });
     }
+
+    return c.json({ error: 'Design file not found in database' }, 404);
   });
 
   return jobsRoutes;
