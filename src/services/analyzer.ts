@@ -27,6 +27,7 @@ import { matchRole } from './css-name-match';
 import type { StyleSnapshot } from './role-aggregator';
 import { CSS_VAR_RESOLVE_SCRIPT, RENDER_CHECK_SCRIPT } from './css-vars-browser';
 import { mapCssVarToRole } from './css-vars-role-map';
+import { extractComponents } from './components';
 
 function extractComputedAnchors(
   style: StyleSnapshot | undefined,
@@ -255,6 +256,10 @@ export async function startAnalysis(
       });
       applied.metadata = applied.metadata || ({} as never);
       (applied.metadata as { cssDecisionCount?: number }).cssDecisionCount = allCssVars.size;
+
+      // Extract component-level styles from role-aggregated samples.
+      const allSamples = pageSamples.flatMap((p) => p.samples);
+      applied.components = extractComponents(allSamples);
 
       await updateJobProgress(jobId, 80);
 

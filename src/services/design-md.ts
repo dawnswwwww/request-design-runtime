@@ -29,6 +29,31 @@ export function buildFrontMatter(system: DesignSystem): string {
   }
 
   lines.push('components:');
+  const components = system.components || {};
+  for (const [role, comp] of Object.entries(components)) {
+    if (!comp) continue;
+    lines.push(`  ${role}:`);
+    const keys: (keyof typeof comp)[] = [
+      'backgroundColor',
+      'color',
+      'borderColor',
+      'borderRadius',
+      'padding',
+      'fontSize',
+      'fontWeight',
+      'fontFamily',
+      'boxShadow',
+    ];
+    for (const key of keys) {
+      const value = comp[key];
+      if (typeof value === 'string' && value) lines.push(`    ${key}: "${value}"`);
+    }
+    if (comp.sources && comp.sources.length > 0) {
+      lines.push('    sources:');
+      for (const src of comp.sources) lines.push(`      - "${src}"`);
+    }
+  }
+
   lines.push('---');
 
   return lines.join('\n');

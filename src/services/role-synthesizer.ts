@@ -9,6 +9,19 @@ export interface DesignSystem {
   spacing: Record<string, string | undefined>;
   rounded: Record<string, string | undefined>;
   shadows: string[];
+  components?: Record<string, {
+    backgroundColor?: string;
+    color?: string;
+    borderColor?: string;
+    borderRadius?: string;
+    padding?: string;
+    fontSize?: string;
+    fontWeight?: string;
+    fontFamily?: string;
+    boxShadow?: string;
+    count: number;
+    sources: string[];
+  }>;
   metadata?: {
     roleProvenance: Record<string, Role>;
     consistency: Record<Role, number>;
