@@ -2,7 +2,11 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { jobs } from '../drizzle/schema';
 
-const rawUrl = process.env.DATABASE_URL || process.env.TEST_DATABASE_URL;
+// IMPORTANT: in test mode (`bun test` auto-loads .env), `DATABASE_URL` points
+// at production. We must use TEST_DATABASE_URL whenever it's set, or tests
+// will wipe the real Supabase database. `NODE_ENV=test` is set by bun test.
+const isTest = process.env.NODE_ENV === 'test';
+const rawUrl = (isTest ? process.env.TEST_DATABASE_URL : undefined) || process.env.DATABASE_URL;
 
 if (!rawUrl) {
   throw new Error('DATABASE_URL or TEST_DATABASE_URL is required');
