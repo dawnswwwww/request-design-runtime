@@ -27,6 +27,11 @@ function fieldAgreement(reference: StyleSnapshot, others: StyleSnapshot[]): numb
   return total === 0 ? 1 : matched / total;
 }
 
+function pagePresence(perPage: StyleSnapshot[], totalPages: number): number {
+  if (totalPages === 0) return 0;
+  return perPage.length / totalPages;
+}
+
 export interface FrequencyEntry<T> {
   value: T;
   count: number;
@@ -200,7 +205,11 @@ export function buildGlobalProfile(pages: PageInput[]): GlobalProfile {
     const merged = mergeStyles(acc.byPage);
     const [first, ...rest] = acc.byPage;
     const conflicting = first ? conflictMap(first, rest) : undefined;
-    const consistency = first && rest.length > 0 ? fieldAgreement(first, rest) : 1;
+    // Consistency = page presence (this role appears on X% of pages).
+    // valueAgreement reflects how well the dominant value matches across pages.
+    const presence = pagePresence(acc.byPage, pages.length);
+    const agreement = first && rest.length > 0 ? fieldAgreement(first, rest) : 1;
+    const consistency = Math.round(presence * agreement * 100) / 100;
     byRole[role] = {
       role,
       style: merged,
