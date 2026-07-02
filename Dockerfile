@@ -10,7 +10,6 @@ RUN apt-get update \
 ENV PATH="/root/.bun/bin:${PATH}"
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV OUTPUT_DIR=/app/output
 ENV BROWSER_ENGINE=playwright
 
 WORKDIR /app
@@ -20,7 +19,6 @@ RUN bun install --production
 
 COPY . .
 
-VOLUME ["/app/output"]
 EXPOSE 3000
 
 CMD ["bun", "src/index.ts"]

@@ -47,8 +47,12 @@ bun run dev
 
 - `POST /analyze` — 提交 URL，返回 jobId
 - `GET /jobs/:id` — 查询 Job 状态
-- `GET /jobs/:id/download` — 下载生成的 DESIGN.md
+- `GET /jobs/:id/download` — 下载生成的 DESIGN.md（从数据库读取）
 - `GET /health` — 健康检查
+
+## 部署
+
+参见 [docs/DEPLOY.md](docs/DEPLOY.md)。推荐使用 Docker Compose 单机部署。
 
 ## Docker
 

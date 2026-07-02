@@ -2,19 +2,16 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { resetDatabase } from '../../src/db';
 import { startAnalysis } from '../../src/services/analyzer';
 import { createJob, getJob } from '../../src/services/jobs';
+import { getDesignDocByJobId } from '../../src/services/design-docs';
 import { McpClient } from '../../src/services/mcp';
 import { LlmClient } from '../../src/services/llm';
-import { mkdir } from 'node:fs/promises';
 
 const FAKE_MCP_PATH = `${import.meta.dir}/../../tests/fixtures/fake-mcp.ts`;
 
 describe('analyze end-to-end', () => {
-  const outputDir = `${import.meta.dir}/../../output`;
   let mcp: McpClient;
 
   beforeAll(async () => {
-    process.env.OUTPUT_DIR = outputDir;
-    await mkdir(outputDir, { recursive: true });
     await resetDatabase();
     mcp = new McpClient(`bun run ${FAKE_MCP_PATH} mcp`);
   });
@@ -24,7 +21,7 @@ describe('analyze end-to-end', () => {
     await resetDatabase();
   });
 
-  test('completes analysis and writes DESIGN.md with mocked services', async () => {
+  test('completes analysis and persists DESIGN.md content to design_docs', async () => {
     const url = 'https://example.com';
     const job = await createJob({ url, outputPath: 'e2e-example/DESIGN.md' });
 
@@ -52,5 +49,9 @@ describe('analyze end-to-end', () => {
       pagesCrawled: expect.any(Number),
       outputPath: 'e2e-example/DESIGN.md',
     });
+
+    const doc = await getDesignDocByJobId(job.id);
+    expect(doc).toBeDefined();
+    expect(doc?.content).toContain('## Overview');
   }, 10000);
 });

@@ -11,8 +11,6 @@ import { generateDesignMd } from './design-md';
 import { createLlmClientFromEnv, LlmClient } from './llm';
 import { createDesignDoc } from './design-docs';
 import { extractDomain, extractRootUrl } from '../utils/url';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
 import type { BrowserClient } from './browser';
 import { createBrowserClient } from './browser';
 import { classifySample, type Role } from '../utils/classify-elements';
@@ -116,7 +114,6 @@ export async function startAnalysis(
   outputPath: string,
   deps: { browser?: BrowserClient; llm?: LlmClient } = {}
 ): Promise<void> {
-  const outputDir = process.env.OUTPUT_DIR || './output';
   const browser = deps.browser ?? (await createBrowserClient());
 
   try {
@@ -265,10 +262,6 @@ export async function startAnalysis(
 
       const llm = deps.llm ?? createLlmClientFromEnv();
       const designMd = await generateDesignMd(applied, llm);
-
-      const fullPath = `${outputDir}/${outputPath}`;
-      await mkdir(dirname(fullPath), { recursive: true });
-      await writeFile(fullPath, designMd, 'utf-8');
 
       await createDesignDoc({
         jobId,
