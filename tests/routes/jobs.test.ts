@@ -7,7 +7,7 @@ import { resetDatabase } from '../../src/db';
 function createTestApp() {
   const app = new Hono();
   app.route('/', healthRoutes);
-  app.route('/', createJobsRoutes(async () => {}));
+  app.route('/', createJobsRoutes(() => {}));
   return app;
 }
 

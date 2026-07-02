@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getJob, createJob } from '../services/jobs';
-import { startAnalysis } from '../services/analyzer';
+import { enqueueAnalysis } from '../services/job-queue-instance';
 import { getDesignDocByJobId } from '../services/design-docs';
 import { extractDomain } from '../utils/url';
 
-export function createJobsRoutes(
-  analyze: typeof startAnalysis = startAnalysis
-): Hono {
+export type EnqueueFn = (jobId: string, url: string, outputPath: string) => Promise<void> | void;
+
+export function createJobsRoutes(enqueue: EnqueueFn = enqueueAnalysis): Hono {
   const jobsRoutes = new Hono();
 
   const analyzeSchema = z.object({
@@ -28,9 +28,7 @@ export function createJobsRoutes(
 
     const job = await createJob({ url, outputPath: path });
 
-    analyze(job.id, url, path).catch((err) => {
-      console.error('Failed to start analysis:', err);
-    });
+    enqueue(job.id, url, path);
 
     return c.json({ jobId: job.id }, 202);
   });
@@ -40,6 +38,15 @@ export function createJobsRoutes(
     const job = await getJob(id);
     if (!job) return c.json({ error: 'Job not found' }, 404);
     return c.json(job);
+  });
+
+  jobsRoutes.get('/jobs/:id/queue-status', async (c) => {
+    const id = c.req.param('id');
+    const snap = (await import('../services/job-queue-instance')).analysisQueue.snapshot();
+    return c.json({
+      inQueue: snap.active.includes(id) || snap.pending.includes(id),
+      queue: { active: snap.active, pending: snap.pending, activeCount: snap.active.length, pendingCount: snap.pending.length },
+    });
   });
 
   jobsRoutes.get('/jobs/:id/download', async (c) => {
