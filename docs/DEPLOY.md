@@ -62,7 +62,7 @@ docker compose up -d --build
 查看日志：
 
 ```bash
-docker compose logs -f app
+docker compose logs -f request-design-api
 ```
 
 #### 5. 验证
@@ -172,9 +172,9 @@ Supabase 数据库可以单独保留或重置。
 
 | 症状 | 排查 |
 |---|---|
-| `health` 返回 502 | 容器崩溃，`docker compose logs app` |
+| `health` 返回 502 | 容器崩溃，`docker compose logs request-design-api` |
 | LLM 调用超时 | 检查 `LLM_BASE_URL` / `LLM_API_KEY` |
 | Playwright 失败 | 镜像基于 `mcr.microsoft.com/playwright`，已带 Chromium，无需额外安装 |
 | Supabase 连接失败 | 检查 `DATABASE_URL`，确认 IPv4 pooler URL |
 | Job 一直 `running` | 浏览器抓取卡住——大多数目标网站需要 ≤ 15s，否则 timeout |
-| Job 直接 `failed` | `docker compose logs app \| grep error` |
+| Job 直接 `failed` | `docker compose logs request-design-api \| grep error` |
