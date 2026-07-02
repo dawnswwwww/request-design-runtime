@@ -33,6 +33,14 @@ describe('token utilities', () => {
       expect(scale.lg).toBe('16px');
       expect(scale.full).toBe('9999px');
     });
+
+    test('filters out absurdly large radius values', () => {
+      const values = ['4px', '8px', '640px']; // 640 is a layout dimension
+      const scale = deriveRadiusScale(values);
+      expect(scale.sm).toBe('4px');
+      expect(scale.md).toBe('8px');
+      expect(scale.xl).toBeUndefined();
+    });
   });
 
   describe('nameColorByRole', () => {

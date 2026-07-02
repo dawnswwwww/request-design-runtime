@@ -1,6 +1,7 @@
 import type { GlobalProfile } from './global-profile';
 import type { Role } from '../utils/classify-elements';
 import { deriveRadiusScale, deriveSpacingScale } from '../utils/tokens';
+import { parseColorToRgb, rgbToHsl } from '../utils/color-helpers';
 
 export interface DesignSystem {
   name: string;
@@ -37,6 +38,29 @@ function isLight(hex: string): boolean {
   const g = parseInt(match[2], 16);
   const b = parseInt(match[3], 16);
   return (r + g + b) / 3 > 200;
+}
+
+function isValidColorValue(value: string): boolean {
+  if (value === 'rgba(0, 0, 0, 0)' || value === 'transparent') return false;
+  // Skip shorthand with multiple rgb values.
+  if ((value.match(/rgb/g) || []).length > 1) return false;
+  if ((value.match(/^#[0-9a-f]{3,8}$/i) || []).length === 0 && !value.startsWith('rgb') && !value.startsWith('hsl')) return false;
+  return true;
+}
+
+function scoreColorForPrimary(value: string, count: number): number {
+  // Convert to HSL to score.
+  const rgb = parseColorToRgb(value);
+  if (!rgb) return 0;
+  const { s, l } = rgbToHsl(rgb);
+  if (l < 8) return 0; // too dark (probably black text)
+  if (l > 92) return 0; // too light (probably white surface)
+  if (s < 8 && (l < 30 || l > 70)) return 0; // grayish extremes
+  // Mid-luminance + decent saturation = good primary candidate.
+  // Prefer mid-luminance (40-70) and saturation >= 30.
+  const lumScore = 1 - Math.abs(0.55 - l / 100); // 1 at l=55, 0.45 at l=0 or 100
+  const satScore = Math.min(1, s / 50);
+  return count * (lumScore * 0.6 + satScore * 0.4);
 }
 
 function pickByFrequency<T extends string>(entries: { value: string; count: number }[]): string | undefined {
@@ -94,10 +118,21 @@ export function synthesizeFromRoleProfile(
         roleProvenance['colors.on-primary'] = 'button-primary';
       }
     } else {
-      const fallback = profile.colorFrequency.find(
-        (c) => c.value !== 'rgba(0, 0, 0, 0)' && c.value !== 'transparent' && !isLight(c.value)
-      )?.value;
-      if (fallback) colors.primary = fallback;
+      // Prefer a deeply-saturated non-extreme (not black, not white) color.
+      const candidates = profile.colorFrequency
+        .filter((c) => isValidColorValue(c.value))
+        .sort((a, b) => b.count - a.count);
+
+      // Score: weight by count, brightness penalty, saturation bonus.
+      const scored = candidates
+        .map((c) => ({ value: c.value, score: scoreColorForPrimary(c.value, c.count) }))
+        .filter((c) => c.score > 0)
+        .sort((a, b) => b.score - a.score);
+      const best = scored[0]?.value;
+      if (best) {
+        colors.primary = best;
+        roleProvenance['colors.primary'] = 'color-frequency';
+      }
     }
   }
 
@@ -164,6 +199,8 @@ export function synthesizeFromRoleProfile(
   for (const entry of profile.colorFrequency) {
     if (entry.value === 'rgba(0, 0, 0, 0)' || entry.value === 'transparent') continue;
     if (used.has(entry.value)) continue;
+    // Reject shorthand values (multiple space-separated colors).
+    if (/\s.*(rgb|#)/.test(entry.value)) continue;
     if (!colors.neutral && isGrayishColor(entry.value)) {
       colors.neutral = entry.value;
       continue;
@@ -181,9 +218,14 @@ export function synthesizeFromRoleProfile(
     const family = cssFamily.split(',')[0].replace(/['"]/g, '').trim();
     typography.family = family;
   }
+  // Pick the dominant sans-serif font for the family.
+  const sansFamily = pickDominantFontFamily(profile.fontFrequency);
+  if (sansFamily) {
+    typography.family = sansFamily;
+  }
+
   if (heading?.style.fontFamily) {
     const family = heading.style.fontFamily.split(',')[0].replace(/['"]/g, '').trim();
-    if (!typography.family) typography.family = family;
     typography['headline-lg'] = {
       fontFamily: typography.family || family,
       fontSize: heading.style.fontSize,
@@ -191,9 +233,6 @@ export function synthesizeFromRoleProfile(
       lineHeight: heading.style.lineHeight,
       letterSpacing: heading.style.letterSpacing,
     };
-  } else if (!typography.family && profile.fontFrequency[0]) {
-    const family = profile.fontFrequency[0].value.split(',')[0].replace(/['"]/g, '').trim();
-    typography.family = family;
   }
 
   const radii = profile.radiusFrequency.map((r) => r.value);
@@ -233,4 +272,27 @@ function isGrayishColor(hex: string): boolean {
   const g = parseInt(match[2], 16);
   const b = parseInt(match[3], 16);
   return Math.abs(r - g) < 20 && Math.abs(g - b) < 20 && Math.abs(r - b) < 20;
+}
+
+const SANS_HINTS = ['sans', 'system', 'helvetica', 'arial', 'inter', 'roboto', 'open sans', 'cantarell', 'lato', 'montserrat', 'noto sans', 'pingfang', 'microsoft yahei', 'sf pro'];
+
+function isSansLike(family: string): boolean {
+  const lower = family.toLowerCase();
+  return SANS_HINTS.some((hint) => lower.includes(hint));
+}
+
+function pickDominantFontFamily(
+  frequency: Array<{ value: string; count: number }>
+): string | undefined {
+  // Filter out serifs/decoratives, sort by count, return top sans.
+  const sansEntries = frequency
+    .map((entry) => {
+      const firstFamily = entry.value.split(',')[0].replace(/['"]/g, '').trim();
+      return { family: firstFamily, count: entry.count };
+    })
+    .filter((e) => e.family && isSansLike(e.family));
+
+  if (sansEntries.length === 0) return undefined;
+  sansEntries.sort((a, b) => b.count - a.count);
+  return sansEntries[0].family;
 }

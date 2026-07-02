@@ -46,8 +46,17 @@ export function deriveSpacingScale(values: string[]): SpacingScale {
 }
 
 export function deriveRadiusScale(values: string[]): RadiusScale {
-  const pixels = values.map(parsePx).filter((n): n is number => n !== null);
-  const hasFull = values.some((v) => v.includes('9999') || v.includes('100%'));
+  // Filter out absurdly large values (>= 128px is almost certainly not a corner
+  // radius — it's likely a layout dimension that got picked up by mistake).
+  // Always keep "9999px" and "100%" patterns (used for full/pill radius).
+  const saneValues = values.filter((v) => {
+    if (v.includes('9999') || v.includes('100%')) return true;
+    const px = parsePx(v);
+    if (px === null) return true; // unknown format, keep
+    return px < 128;
+  });
+  const pixels = saneValues.map(parsePx).filter((n): n is number => n !== null);
+  const hasFull = saneValues.some((v) => v.includes('9999') || v.includes('100%'));
 
   const scale: RadiusScale = {};
 
@@ -55,7 +64,10 @@ export function deriveRadiusScale(values: string[]): RadiusScale {
   if (pixels.some((p) => Math.abs(p - 4) <= 1)) scale.sm = '4px';
   if (pixels.some((p) => Math.abs(p - 8) <= 2)) scale.md = '8px';
   if (pixels.some((p) => Math.abs(p - 16) <= 4)) scale.lg = '16px';
-  if (pixels.some((p) => p >= 24 && p < 9999)) scale.xl = `${pixels.find((p) => p >= 24 && p < 9999)}px`;
+  if (pixels.some((p) => p >= 24 && p < 128)) {
+    const xl = pixels.find((p) => p >= 24 && p < 128);
+    if (xl !== undefined) scale.xl = `${xl}px`;
+  }
   if (hasFull) scale.full = '9999px';
 
   return scale;
