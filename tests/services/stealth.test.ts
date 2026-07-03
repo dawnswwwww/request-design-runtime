@@ -7,6 +7,8 @@ import {
   STEALTH_VIEWPORTS,
   STEALTH_INIT_SCRIPT,
   STEALTH_LAUNCH_ARGS,
+  HUMAN_BEHAVIOR_SCRIPT,
+  WARM_UP_URLS,
 } from '../../src/services/stealth';
 
 describe('isStealthEnabled', () => {
@@ -63,5 +65,44 @@ describe('STEALTH_INIT_SCRIPT', () => {
 
   test('mocks languages', () => {
     expect(STEALTH_INIT_SCRIPT).toContain('languages');
+  });
+
+  test('mocks hardwareConcurrency and deviceMemory', () => {
+    expect(STEALTH_INIT_SCRIPT).toContain('hardwareConcurrency');
+    expect(STEALTH_INIT_SCRIPT).toContain('deviceMemory');
+  });
+
+  test('mocks pdfViewerEnabled', () => {
+    expect(STEALTH_INIT_SCRIPT).toContain('pdfViewerEnabled');
+  });
+
+  test('injects audio fingerprint noise', () => {
+    expect(STEALTH_INIT_SCRIPT).toContain('AudioContext');
+  });
+
+  test('mocks speech synthesis voices', () => {
+    expect(STEALTH_INIT_SCRIPT).toContain('speechSynthesis');
+  });
+
+  test('overrides document.hasFocus', () => {
+    expect(STEALTH_INIT_SCRIPT).toContain('hasFocus');
+  });
+});
+
+describe('HUMAN_BEHAVIOR_SCRIPT', () => {
+  test('runs random mouse moves and scroll', () => {
+    expect(HUMAN_BEHAVIOR_SCRIPT).toContain('MouseEvent');
+    expect(HUMAN_BEHAVIOR_SCRIPT).toContain('scrollBy');
+  });
+
+  test('includes a realistic dwell time', () => {
+    expect(HUMAN_BEHAVIOR_SCRIPT).toContain('sleep');
+  });
+});
+
+describe('WARM_UP_URLS', () => {
+  test('includes benign sites for cookie warming', () => {
+    expect(WARM_UP_URLS.length).toBeGreaterThan(0);
+    expect(WARM_UP_URLS.every((u) => u.startsWith('https://'))).toBe(true);
   });
 });

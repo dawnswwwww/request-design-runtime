@@ -8,6 +8,8 @@ import {
   pickViewport,
   STEALTH_INIT_SCRIPT,
   STEALTH_LAUNCH_ARGS,
+  WARM_UP_URLS,
+  HUMAN_BEHAVIOR_SCRIPT,
 } from './stealth';
 
 export class PlaywrightBrowserClient implements BrowserClient {
@@ -21,30 +23,42 @@ export class PlaywrightBrowserClient implements BrowserClient {
     this.stealth = isStealthEnabled();
 
     if (this.stealth) {
-      // Dynamic import keeps stealth deps out of the default load path.
       const { chromium: stealthChromium } = await import('playwright-extra');
       const StealthPlugin = (await import('puppeteer-extra-plugin-stealth')).default;
       stealthChromium.use(StealthPlugin());
 
       this.browser = await stealthChromium.launch({
         headless: true,
-        // Defensive copy: chromium mutates the args array internally.
         args: [...STEALTH_LAUNCH_ARGS],
       });
     } else {
       this.browser = await pwChromium.launch({ headless: true });
     }
 
-    const viewport = pickViewport(`browser-${Math.random()}`);
+    const seed = `browser-${Math.random()}`;
+    const viewport = pickViewport(seed);
     this.context = await this.browser.newContext({
       viewport,
-      userAgent: pickUserAgent(`browser-${Math.random()}`),
+      userAgent: pickUserAgent(seed),
       locale: 'en-US',
       timezoneId: 'America/New_York',
     });
 
     if (this.stealth) {
+      // Layered init script: stealth plugin handles most, we add more.
       await this.context.addInitScript({ content: STEALTH_INIT_SCRIPT });
+
+      // Cookie warming: visit a few benign sites first to accumulate
+      // realistic state (NID, AEC, _ga). Real Chrome has these.
+      const warmPage = await this.context.newPage();
+      try {
+        for (const url of WARM_UP_URLS) {
+          await warmPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
+        }
+      } catch {
+        // warm-up is best-effort
+      }
+      await warmPage.close();
     }
 
     this.page = await this.context.newPage();
@@ -52,7 +66,15 @@ export class PlaywrightBrowserClient implements BrowserClient {
 
   async goto(url: string): Promise<void> {
     if (!this.page) throw new Error('Browser not started');
-    await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    if (this.stealth) {
+      // Stealth mode: wait for `load` (not just DOMContentLoaded) so
+      // anti-bot JS gets a chance to run. Longer timeout for stealth.
+      await this.page.goto(url, { waitUntil: 'load', timeout: 30000 });
+      // Human behavior simulation: random mouse move + scroll + dwell.
+      await this.page.evaluate(HUMAN_BEHAVIOR_SCRIPT).catch(() => {});
+    } else {
+      await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    }
   }
 
   async evaluate<T = unknown>(script: string): Promise<T> {
