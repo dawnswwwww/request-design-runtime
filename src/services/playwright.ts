@@ -1,14 +1,53 @@
-import { chromium, type Browser, type Page } from 'playwright';
+import { chromium as pwChromium, type Browser, type Page, type BrowserContext } from 'playwright';
+// Stealth deps are loaded dynamically only when STEALTH_MODE is on,
+// to keep them out of the default install path and not affect tests.
 import type { BrowserClient, BrowserLink } from './browser';
+import {
+  isStealthEnabled,
+  pickUserAgent,
+  pickViewport,
+  STEALTH_INIT_SCRIPT,
+  STEALTH_LAUNCH_ARGS,
+} from './stealth';
 
 export class PlaywrightBrowserClient implements BrowserClient {
   private browser: Browser | null = null;
   private page: Page | null = null;
+  private context: BrowserContext | null = null;
+  private stealth = false;
 
   async start(): Promise<void> {
     if (this.browser) return;
-    this.browser = await chromium.launch({ headless: true });
-    this.page = await this.browser.newPage();
+    this.stealth = isStealthEnabled();
+
+    if (this.stealth) {
+      // Dynamic import keeps stealth deps out of the default load path.
+      const { chromium: stealthChromium } = await import('playwright-extra');
+      const StealthPlugin = (await import('puppeteer-extra-plugin-stealth')).default;
+      stealthChromium.use(StealthPlugin());
+
+      this.browser = await stealthChromium.launch({
+        headless: true,
+        // Defensive copy: chromium mutates the args array internally.
+        args: [...STEALTH_LAUNCH_ARGS],
+      });
+    } else {
+      this.browser = await pwChromium.launch({ headless: true });
+    }
+
+    const viewport = pickViewport(`browser-${Math.random()}`);
+    this.context = await this.browser.newContext({
+      viewport,
+      userAgent: pickUserAgent(`browser-${Math.random()}`),
+      locale: 'en-US',
+      timezoneId: 'America/New_York',
+    });
+
+    if (this.stealth) {
+      await this.context.addInitScript({ content: STEALTH_INIT_SCRIPT });
+    }
+
+    this.page = await this.context.newPage();
   }
 
   async goto(url: string): Promise<void> {
@@ -79,6 +118,10 @@ export class PlaywrightBrowserClient implements BrowserClient {
     if (this.page) {
       await this.page.close();
       this.page = null;
+    }
+    if (this.context) {
+      await this.context.close();
+      this.context = null;
     }
     if (this.browser) {
       await this.browser.close();
